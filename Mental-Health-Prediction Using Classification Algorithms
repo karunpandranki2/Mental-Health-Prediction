@@ -1,0 +1,132 @@
+#CODE1:
+# Mental Health Prediction Using Decision Tree
+# Upload your 'k.csv' file before running the code
+
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
+
+# Load dataset
+from google.colab import files
+uploaded = files.upload()
+
+# Read the uploaded CSV
+df = pd.read_csv("k.csv")
+
+# Drop columns not needed (example: Timestamp)
+if 'Timestamp' in df.columns:
+    df = df.drop('Timestamp', axis=1)
+
+# Encode categorical features
+label_encoders = {}
+for column in df.columns:
+    if df[column].dtype == 'object':
+        le = LabelEncoder()
+        df[column] = le.fit_transform(df[column].astype(str))
+        label_encoders[column] = le
+
+# Set features and label
+X = df.drop('treatment', axis=1)
+y = df['treatment']
+
+# Split data
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Train Decision Tree
+model = DecisionTreeClassifier(random_state=0)
+model.fit(X_train, y_train)
+
+# Predict and evaluate
+y_pred = model.predict(X_test)
+accuracy = accuracy_score(y_test, y_pred)
+print("Accuracy:", accuracy)
+
+# Confusion Matrix and Classification Report
+print("Confusion Matrix:\n", confusion_matrix(y_test, y_pred))
+print("\nClassification Report:\n", classification_report(y_test, y_pred))
+
+# Predicting probabilities like in the paper
+sample_input = X_test.iloc[0:1]
+sample_pred = model.predict(sample_input)[0]
+sample_prob = model.predict_proba(sample_input)[0][1]
+print("\nSample Prediction:", sample_pred)
+print("Predicted Probability of Needing Treatment:", round(sample_prob, 2))
+
+# Meaning based on probability
+if sample_prob > 0.63:
+    print("🟥 User likely has a mental illness.")
+elif 0.3 <= sample_prob <= 0.63:
+    print("🟨 User may develop a mental illness.")
+else:
+    print("🟩 User is unlikely to have a mental illness.")
+
+
+#CODE 2:
+# Install Gradio
+!pip install gradio --quiet
+
+# Import libraries
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+from sklearn.ensemble import RandomForestClassifier
+import gradio as gr
+
+# Load dataset
+df = pd.read_csv("k.csv")
+
+# Define the 8 features used in the form
+features = ['Gender', 'self_employed', 'family_history', 'Work_Interest',
+            'Mental_Health_History', 'Mood_Swings', 'Coping_Struggles', 'Social_Weakness']
+target = 'treatment'
+
+# Drop missing values
+df = df[features + [target]].dropna()
+
+# Encode labels
+label_encoders = {}
+for col in features + [target]:
+    le = LabelEncoder()
+    df[col] = le.fit_transform(df[col])
+    label_encoders[col] = le
+
+# Split and train model
+X = df[features]
+y = df[target]
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+model = RandomForestClassifier()
+model.fit(X_train, y_train)
+
+# Prediction function
+def predict_mental_health(*args):
+    try:
+        # Encode user input
+        inputs = [label_encoders[col].transform([val])[0] for col, val in zip(features, args)]
+        prob = model.predict_proba([inputs])[0][1]
+        pred = model.predict([inputs])[0]
+
+        # Risk logic
+        if prob > 0.63:
+            status = "🟥 User likely has a mental illness."
+        elif 0.3 <= prob <= 0.63:
+            status = "🟨 User may develop a mental illness."
+        else:
+            status = "🟩 User is unlikely to have a mental illness."
+
+        return f"Prediction: {'Yes' if pred == 1 else 'No'}\nProbability: {round(prob, 2)}\n{status}"
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+# Create Gradio UI
+inputs = [gr.Dropdown(label_encoders[col].classes_.tolist(), label=col) for col in features]
+
+gr.Interface(
+    fn=predict_mental_health,
+    inputs=inputs,
+    outputs="text",
+    title="🧠 Mental Health Treatment Prediction",
+    description="Enter 8 key mental health factors to predict treatment likelihood"
+).launch(debug=True)
