@@ -1,0 +1,66 @@
+#CODE 2:
+# Install Gradio
+!pip install gradio --quiet
+
+# Import libraries
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+from sklearn.ensemble import RandomForestClassifier
+import gradio as gr
+
+# Load dataset
+df = pd.read_csv("k.csv")
+
+# Define the 8 features used in the form
+features = ['Gender', 'self_employed', 'family_history', 'Work_Interest',
+            'Mental_Health_History', 'Mood_Swings', 'Coping_Struggles', 'Social_Weakness']
+target = 'treatment'
+
+# Drop missing values
+df = df[features + [target]].dropna()
+
+# Encode labels
+label_encoders = {}
+for col in features + [target]:
+    le = LabelEncoder()
+    df[col] = le.fit_transform(df[col])
+    label_encoders[col] = le
+
+# Split and train model
+X = df[features]
+y = df[target]
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+model = RandomForestClassifier()
+model.fit(X_train, y_train)
+
+# Prediction function
+def predict_mental_health(*args):
+    try:
+        # Encode user input
+        inputs = [label_encoders[col].transform([val])[0] for col, val in zip(features, args)]
+        prob = model.predict_proba([inputs])[0][1]
+        pred = model.predict([inputs])[0]
+
+        # Risk logic
+        if prob > 0.63:
+            status = "🟥 User likely has a mental illness."
+        elif 0.3 <= prob <= 0.63:
+            status = "🟨 User may develop a mental illness."
+        else:
+            status = "🟩 User is unlikely to have a mental illness."
+
+        return f"Prediction: {'Yes' if pred == 1 else 'No'}\nProbability: {round(prob, 2)}\n{status}"
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+# Create Gradio UI
+inputs = [gr.Dropdown(label_encoders[col].classes_.tolist(), label=col) for col in features]
+
+gr.Interface(
+    fn=predict_mental_health,
+    inputs=inputs,
+    outputs="text",
+    title="🧠 Mental Health Treatment Prediction",
+    description="Enter 8 key mental health factors to predict treatment likelihood"
+).launch(debug=True)
